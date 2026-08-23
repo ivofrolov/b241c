@@ -1,0 +1,827 @@
+#+property: header-args:verb :wrap src ob-verb-response
+
+* B241C
+Мок сервер для тестирования обмена 1С с сайтом.
+
+** Протокол обмена с сайтом
+См. [[https://v8.1c.ru/tekhnologii/obmen-dannymi-i-integratsiya/standarty-i-formaty/protokol-obmena-s-saytom/][описание]] и [[https://v8.1c.ru/tekhnologii/obmen-dannymi-i-integratsiya/standarty-i-formaty/standarty-commerceml/commerceml-2/][формат данных]].
+
+Актуальную XML схему см. в [[file:СхемаОбмена.xsd][СхемаОбмена.xsd]]
+
+*** Выгрузка данных о товарах
+#+begin_example
+┌───────┐                                                             ┌───────┐
+│  1C   │                                                             │Website│
+└───────┘                                                             └───────┘
+    │                                                                     │    
+  ┌─┼─────────────────────────────────────────────────────────────────────┼─┐  
+  │ │[loop]                                                               │ │  
+  │ │                                                                     │ │  
+  │ │──?type=catalog&mode=checkauth──────────────────────────────────────>│ │  
+  │ │<──────────────────────────────success <cookie name> <cookie value>──│ │  
+  │ │                                                                     │ │  
+  │ │                                                                     │ │  
+  │ │──?type=catalog&mode=init───────────────────────────────────────────>│ │  
+  │ │<────────────────────────────────────────────────<zip> <file_limit>──│ │  
+  │ │                                                                     │ │  
+  │ │                                                                     │ │  
+  │ │──?type=catalog&mode=file&filename=<filename> <content>─────────────>│ │  
+  │ │<───────────────────────────────────────────────────────────success──│ │  
+  │ │                                                                     │ │  
+  │ │                                                                     │ │  
+  │ │──?type=catalog&mode=import&filename=<filename>─────────────────────>│ │  
+  │┌┼─────────────────────────────────────────────────────────────────────┼┐│  
+  │││[optional] [loop]                                                    │││  
+  │││<──────────────────────────────────────────────────────────progress──│││  
+  │││──?type=catalog&mode=import&filename=<filename>─────────────────────>│││  
+  │└┼─────────────────────────────────────────────────────────────────────┼┘│  
+  │ │<───────────────────────────────────────────────────────────success──│ │  
+  │ │                                                                     │ │  
+  └─┼─────────────────────────────────────────────────────────────────────┼─┘  
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=catalog&mode=checkauth──────────────────────────────────────>│    
+    │<────────────────────────────────────────────────────────────────────│    
+    │                                                                     │    
+    │──?type=catalog&mode=complete───────────────────────────────────────>│    
+    │<───────────────────────────────────────────────────────────success──│    
+    │                                                                     │    
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=catalog&mode=checkauth──────────────────────────────────────>│    
+    │<────────────────────────────────────────────────────────────────────│    
+    │                                                                     │    
+    │──?type=catalog&mode=deactivate─────────────────────────────────────>│    
+    │<───────────────────────────────────────────────────────────success──│    
+    │                                                                     │    
+    │                                                                     │    
+#+end_example
+
+**** 1. Авторизация
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=checkauth
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 07:49:19 GMT
+Set-Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9; Path=/; HttpOnly
+Content-Length: 50
+
+success
+PHPSESSID
+207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+**** 2. Инициализация
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=init
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 07:49:33 GMT
+Content-Length: 25
+
+zip=no
+file_limit=1048576
+#+end_src
+
+**** 3. Передача файла
+***** Виды цен
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=priceLists_1_1_9921c637-a704-4787-b73c-c3e88b05486e.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+Content-Type: application/xml; charset=utf-8
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:17" Ид="Новая настройка обмена">
+  <Каталог СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Наименование>Товары 1С</Наименование>
+    <Описание>Товары 1С</Описание>
+  </Каталог>
+  <Классификатор СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Товары 1С</Наименование>
+    <ТипыЦен>
+      <ТипЦены>
+        <Ид>08305aca-7303-11df-b338-0011955cba6b</Ид>
+        <НомерВерсии>AAAAAQAAABM=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Наименование>Розничная</Наименование>
+        <Валюта>RUB</Валюта>
+        <Налог>
+          <Наименование>НДС</Наименование>
+          <УчтеноВСумме>true</УчтеноВСумме>
+          <Акциз>false</Акциз>
+        </Налог>
+      </ТипЦены>
+    </ТипыЦен>
+  </Классификатор>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 07:49:52 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Склады
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=storages_1_1_4430533f-dbe3-4399-8f52-c66d41c64c98.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:19" Ид="Новая настройка обмена">
+  <Каталог СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Наименование>Товары 1С</Наименование>
+    <Описание>Товары 1С</Описание>
+  </Каталог>
+  <Классификатор СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Товары 1С</Наименование>
+    <Склады>
+      <Склад>
+        <Ид>b63f7fc6-4347-11ee-841a-e16e604b2373</Ид>
+        <НомерВерсии>AAAAAQAAAAU=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Наименование>Магазин "Техника для дома"</Наименование>
+      </Склад>
+      <Склад>
+        <Ид>3f86a8a6-4a24-11e0-af0f-0015e9b8c48d</Ид>
+        <НомерВерсии>AAAAAQAAABU=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Наименование>Склад бытовой техники</Наименование>
+      </Склад>
+    </Склады>
+  </Классификатор>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 07:50:32 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Виды свойств
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=propertiesGoods_1_1_ee60110b-d8c2-4524-bc59-3314abb6e332.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:20" Ид="Новая настройка обмена">
+  <Каталог СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Наименование>Товары 1С</Наименование>
+    <Описание>Товары 1С</Описание>
+  </Каталог>
+  <Классификатор СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Товары 1С</Наименование>
+    <Свойства>
+      <Свойство>
+        <Ид>d62abd0c-9d76-11f1-8ac0-087190fd1186</Ид>
+        <Наименование>Напряжение</Наименование>
+        <НомерВерсии>AAAAIAAAAAU=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Внешний>false</Внешний>
+        <Информационное>true</Информационное>
+        <ТипЗначений>Справочник</ТипЗначений>
+        <ВариантыЗначений>
+          <Справочник>
+            <ИдЗначения>d62abd0d-9d76-11f1-8ac0-087190fd1186</ИдЗначения>
+            <Значение>110 В</Значение>
+          </Справочник>
+          <Справочник>
+            <ИдЗначения>d62abd0e-9d76-11f1-8ac0-087190fd1186</ИдЗначения>
+            <Значение>220 В</Значение>
+          </Справочник>
+        </ВариантыЗначений>
+      </Свойство>
+    </Свойства>
+  </Классификатор>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:16:05 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Единицы измерения
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=units_1_1_dec39217-63cd-4c5e-9530-7643d4fdd1e4.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:23" Ид="Новая настройка обмена">
+  <Каталог СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Наименование>Товары 1С</Наименование>
+    <Описание>Товары 1С</Описание>
+  </Каталог>
+  <Классификатор СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Товары 1С</Наименование>
+    <ЕдиницыИзмерения>
+      <ЕдиницаИзмерения>
+        <Ид>796 </Ид>
+        <НомерВерсии>AAAAAQAAABQ=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <НаименованиеКраткое>шт</НаименованиеКраткое>
+        <Код>796 </Код>
+        <НаименованиеПолное>Штука</НаименованиеПолное>
+        <МеждународноеСокращение>PCE</МеждународноеСокращение>
+      </ЕдиницаИзмерения>
+      <ЕдиницаИзмерения>
+        <Ид>778 </Ид>
+        <НомерВерсии>AAAAAQAAABU=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <НаименованиеКраткое>упак</НаименованиеКраткое>
+        <Код>778 </Код>
+        <НаименованиеПолное>Упаковка</НаименованиеПолное>
+        <МеждународноеСокращение>NMP</МеждународноеСокращение>
+      </ЕдиницаИзмерения>
+    </ЕдиницыИзмерения>
+  </Классификатор>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:16:17 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Группы (разделы каталога)
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=groups_1_1_0b95453a-bbff-4823-9ea3-7f40a8a68cd6.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:24" Ид="Новая настройка обмена">
+  <Каталог СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Наименование>Товары 1С</Наименование>
+    <Описание>Товары 1С</Описание>
+  </Каталог>
+  <Классификатор СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Товары 1С</Наименование>
+    <Группы>
+      <Группа>
+        <Ид>fad620c2-c719-11e4-8ec3-bcaec56cc144</Ид>
+        <НомерВерсии>AAAAAQAAAHM=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Наименование>Торговая деятельность</Наименование>
+        <Группы>
+          <Группа>
+            <Ид>bd72d924-55bc-11d9-848a-00112f43529a</Ид>
+            <НомерВерсии>AAAAAQAAACc=</НомерВерсии>
+            <ПометкаУдаления>false</ПометкаУдаления>
+            <Наименование>Бытовая техника</Наименование>
+            <Группы>
+              <Группа>
+                <Ид>cbcf493e-55bc-11d9-848a-00112f43529a</Ид>
+                <НомерВерсии>AAAAAQAAADM=</НомерВерсии>
+                <ПометкаУдаления>false</ПометкаУдаления>
+                <Наименование>Вентиляторы, пылесосы, кондиционеры</Наименование>
+              </Группа>
+            </Группы>
+          </Группа>
+        </Группы>
+      </Группа>
+    </Группы>
+  </Классификатор>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:16:26 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Товары
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=goods_1_1_c9e764ff-be43-4ffa-baa6-2f04fdfb3215.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:25" Ид="Новая настройка обмена">
+  <Каталог СодержитТолькоИзменения="true">
+    <Ид>066039de-2d54-4586-81f5-56444e369265</Ид>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Наименование>Товары 1С</Наименование>
+    <Товары>
+      <Товар>
+        <Ид>dee6e1aa-55bc-11d9-848a-00112f43529a</Ид>
+        <НомерВерсии>AAAAAwAAAAA=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Штрихкод/>
+        <Артикул>П-890</Артикул>
+        <Наименование>Пылесос "Омега" 1250вт</Наименование>
+        <БазоваяЕдиница>796 </БазоваяЕдиница>
+        <Группы>
+          <Ид>cbcf493e-55bc-11d9-848a-00112f43529a</Ид>
+        </Группы>
+        <Описание/>
+        <Страна/>
+        <Изготовитель>
+          <Ид>061e1ea5-e4e9-11e0-af8f-0015e9b8c48d</Ид>
+          <Наименование>Завод бытовой техники</Наименование>
+          <ОфициальноеНаименование>Завод бытовой техники</ОфициальноеНаименование>
+        </Изготовитель>
+        <ЗначенияСвойств>
+          <ЗначенияСвойства>
+            <Ид>d62abd0c-9d76-11f1-8ac0-087190fd1186</Ид>
+            <Значение>d62abd0e-9d76-11f1-8ac0-087190fd1186</Значение>
+          </ЗначенияСвойства>
+          <ЗначенияСвойства>
+            <Ид>2a2a07de-0cd2-11e0-aede-0015e9b8c48d</Ид>
+            <Значение>00000000-0000-0000-0000-000000000000</Значение>
+          </ЗначенияСвойства>
+          <ЗначенияСвойства>
+            <Ид>Бренд</Ид>
+            <Значение>00000000-0000-0000-0000-000000000000</Значение>
+          </ЗначенияСвойства>
+        </ЗначенияСвойств>
+        <СтавкиНалогов>
+          <СтавкаНалога>
+            <Наименование>НДС</Наименование>
+            <Ставка>20</Ставка>
+          </СтавкаНалога>
+        </СтавкиНалогов>
+        <ЗначенияРеквизитов>
+          <ЗначениеРеквизита>
+            <Наименование>ВидНоменклатуры</Наименование>
+            <Значение>Электротовары</Значение>
+          </ЗначениеРеквизита>
+          <ЗначениеРеквизита>
+            <Наименование>ТипНоменклатуры</Наименование>
+            <Значение>Товар</Значение>
+          </ЗначениеРеквизита>
+          <ЗначениеРеквизита>
+            <Наименование>Полное наименование</Наименование>
+            <Значение>Пылесос "Омега" 1250вт</Значение>
+          </ЗначениеРеквизита>
+          <ЗначениеРеквизита>
+            <Наименование>Код</Наименование>
+            <Значение>000000104</Значение>
+          </ЗначениеРеквизита>
+          <ЗначениеРеквизита>
+            <Наименование>Планируемая дата поступления</Наименование>
+            <Значение/>
+          </ЗначениеРеквизита>
+        </ЗначенияРеквизитов>
+        <Ширина>0.2</Ширина>
+        <Длина>0.1</Длина>
+        <Высота>0.5</Высота>
+      </Товар>
+    </Товары>
+    <Описание>Товары 1С</Описание>
+  </Каталог>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:19:56 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Предложения
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=offers_1_1_36c91070-54a9-45d7-acef-f857b29e583e.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:27" Ид="Новая настройка обмена">
+  <ПакетПредложений СодержитТолькоИзменения="true">
+    <Ид>#066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Пакет предложений (Товары 1С)</Наименование>
+    <ИдКаталога>066039de-2d54-4586-81f5-56444e369265</ИдКаталога>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Предложения>
+      <Предложение>
+        <Ид>dee6e1aa-55bc-11d9-848a-00112f43529a</Ид>
+        <НомерВерсии>AAAAAwAAAAA=</НомерВерсии>
+        <ПометкаУдаления>false</ПометкаУдаления>
+        <Наименование>Пылесос "Омега" 1250вт</Наименование>
+        <Ширина>0.2</Ширина>
+        <Длина>0.1</Длина>
+        <Высота>0.5</Высота>
+      </Предложение>
+    </Предложения>
+  </ПакетПредложений>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:22:14 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Цены
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=prices_1_1_7636d01c-59bf-43e6-9472-370e54bc1415.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:28" Ид="Новая настройка обмена">
+  <ПакетПредложений СодержитТолькоИзменения="true">
+    <Ид>#066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Пакет предложений (Товары 1С)</Наименование>
+    <ИдКаталога>066039de-2d54-4586-81f5-56444e369265</ИдКаталога>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Предложения>
+      <Предложение>
+        <Ид>dee6e1aa-55bc-11d9-848a-00112f43529a</Ид>
+        <Цены>
+          <Цена>
+            <Представление>4 200 руб</Представление>
+            <ИдТипаЦены>08305aca-7303-11df-b338-0011955cba6b</ИдТипаЦены>
+            <ЦенаЗаЕдиницу>4200</ЦенаЗаЕдиницу>
+            <Валюта>RUB</Валюта>
+            <Налог>
+              <Наименование>НДС</Наименование>
+              <УчтеноВСумме>true</УчтеноВСумме>
+            </Налог>
+          </Цена>
+        </Цены>
+      </Предложение>
+    </Предложения>
+  </ПакетПредложений>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:23:54 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+***** Остатки
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=file&filename=rests_1_1_b1b167db-f776-4da6-8b17-7b8d11a2e5a9.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация xmlns="urn:1C.ru:commerceml_3" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ВерсияСхемы="3.1" ДатаФормирования="2026-08-22T21:14:29" Ид="Новая настройка обмена">
+  <ПакетПредложений СодержитТолькоИзменения="true">
+    <Ид>#066039de-2d54-4586-81f5-56444e369265</Ид>
+    <Наименование>Пакет предложений (Товары 1С)</Наименование>
+    <ИдКаталога>066039de-2d54-4586-81f5-56444e369265</ИдКаталога>
+    <ИдКлассификатора>066039de-2d54-4586-81f5-56444e369265</ИдКлассификатора>
+    <Предложения>
+      <Предложение>
+        <Ид>dee6e1aa-55bc-11d9-848a-00112f43529a</Ид>
+        <Остатки>
+          <Остаток>
+            <Склад>
+              <Ид>b63f7fc6-4347-11ee-841a-e16e604b2373</Ид>
+              <Количество>1</Количество>
+            </Склад>
+          </Остаток>
+          <Остаток>
+            <Склад>
+              <Ид>3f86a8a6-4a24-11e0-af0f-0015e9b8c48d</Ид>
+              <Количество>64</Количество>
+            </Склад>
+          </Остаток>
+        </Остатки>
+      </Предложение>
+    </Предложения>
+  </ПакетПредложений>
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:26:32 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+**** 3. Импорт файла сервером
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=import&filename=export.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:26:43 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+**** 4. Окончание выгрузки товаров
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=complete
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:26:47 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+**** 5. Деактивация данных
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=catalog&mode=deactivate
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:26:50 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+*** Обмен документами
+#+begin_example
+┌───────┐                                                             ┌───────┐
+│  1C   │                                                             │Website│
+└───────┘                                                             └───────┘
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=sale&mode=checkauth─────────────────────────────────────────>│    
+    │<──────────────────────────────success <cookie name> <cookie value>──│    
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=sale&mode=init──────────────────────────────────────────────>│    
+    │<───────────────────────────────────<zip> <file_limit> <> <version>──│    
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=sale&mode=query─────────────────────────────────────────────>│    
+    │<─────────────────────────────────────────────────────────<content>──│    
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=sale&mode=success───────────────────────────────────────────>│    
+    │<───────────────────────────────────────────────────────────success──│    
+    │                                                                     │    
+    │                                                                     │    
+    │──?type=sale&mode=file&filename=<filename> <content>────────────────>│    
+    │<───────────────────────────────────────────────────────────success──│    
+    │                                                                     │    
+    │                                                                     │    
+#+end_example
+
+**** 1. Авторизация
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=sale&mode=checkauth
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:27:18 GMT
+Set-Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9; Path=/; HttpOnly
+Content-Length: 50
+
+success
+PHPSESSID
+207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+**** 2. Инициализация
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=sale&mode=init
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 08:27:30 GMT
+Content-Length: 38
+
+zip=no
+file_limit=1048576
+
+version 3.1
+#+end_src
+
+**** 3. Получение файла
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=sale&mode=query
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 15:36:30 GMT
+Content-Type: application/xml
+Content-Length: 3757
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация
+    xmlns="urn:1C.ru:commerceml_3"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    ВерсияСхемы="3.1"
+    ДатаФормирования="2026-08-22T21:14:29">
+  <Контейнер>
+    <Документ>
+      <Ид>bce8cd28-6206-481a-ab23-f614b3a3e0a8</Ид>
+      <Номер>1</Номер>
+      <Дата>2026-08-22</Дата>
+      <Время>21:14:29</Время>
+      <ХозОперация>Заказ товара</ХозОперация>
+      <Контрагенты>
+        <Контрагент>
+          <Ид>da51150b-9955-4734-bf3a-ae2c3c54181a</Ид>
+          <Наименование>Иванов Иван Иванович</Наименование>
+          <Контакты>
+            <Контакт>
+              <Тип>Телефон рабочий</Тип>
+              <Значение>+01234567890</Значение>
+            </Контакт>
+          </Контакты>
+        </Контрагент>
+      </Контрагенты>
+      <Валюта>RUB</Валюта>
+      <Курс>1</Курс>
+      <Сумма>9683.42</Сумма>
+      <Основание></Основание>
+      <Роль>Продавец</Роль>
+      <Товары>
+        <Товар>
+          <Ид>ORDER_DELIVERY</Ид>
+          <Наименование>Доставка</Наименование>
+          <БазоваяЕдиница>796 </БазоваяЕдиница>
+          <Количество>1.00</Количество>
+          <ЦенаЗаЕдиницу>348.00</ЦенаЗаЕдиницу>
+          <Сумма>348.00</Сумма>
+        </Товар>
+        <Товар>
+          <Ид>dee6e1aa-55bc-11d9-848a-00112f43529a</Ид>
+          <Наименование>Пылесос "Омега" 1250вт</Наименование>
+          <БазоваяЕдиница>796 </БазоваяЕдиница>
+          <ЗначенияРеквизитов>
+            <ЗначениеРеквизита>
+              <Наименование>Склад</Наименование>
+              <Значение>b63f7fc6-4347-11ee-841a-e16e604b2373</Значение>
+            </ЗначениеРеквизита>
+          </ЗначенияРеквизитов>
+          <Количество>1.00</Количество>
+          <ЦенаЗаЕдиницу>9335.42</ЦенаЗаЕдиницу>
+          <Сумма>9335.42</Сумма>
+        </Товар>
+      </Товары>
+    </Документ>
+    <Документ>
+      <Ид>52cbe99a-7cd5-46ae-acfa-048b258f23c2</Ид>
+      <Номер>1</Номер>
+      <Дата>2026-08-22</Дата>
+      <Время>21:14:29</Время>
+      <ХозОперация>Эквайринговая операция</ХозОперация>
+      <Контрагенты>
+        <Контрагент>
+          <Ид>da51150b-9955-4734-bf3a-ae2c3c54181a</Ид>
+          <Наименование>Иванов Иван Иванович</Наименование>
+          <Контакты>
+            <Контакт>
+              <Тип>Телефон рабочий</Тип>
+              <Значение>+01234567890</Значение>
+            </Контакт>
+          </Контакты>
+        </Контрагент>
+      </Контрагенты>
+      <Валюта>RUB</Валюта>
+      <Курс>1</Курс>
+      <Сумма>9683.42</Сумма>
+      <Основание></Основание>
+      <Роль>Продавец</Роль>
+    </Документ>
+  </Контейнер>
+</КоммерческаяИнформация>
+#+end_src
+
+**** 4. Завершение импорта заказов
+#+begin_src verb
+POST http://localhost:8000/1c_exchange.php?type=sale&mode=success
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 09:00:37 GMT
+Content-Length: 7
+
+success
+#+end_src
+
+**** 5. Передача файла
+#+begin_src verb :exports both
+POST http://localhost:8000/1c_exchange.php?type=sale&mode=file&filename=data.xml
+Authorization: Basic dXNlcjpwYXNzd29yZA==
+Cookie: PHPSESSID=207d5cfb792f0cbdeae6896bde279cc9
+
+<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация
+    xmlns="urn:1C.ru:commerceml_3"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    ВерсияСхемы="3.1"
+    ДатаФормирования="2026-08-22T21:14:29">
+</КоммерческаяИнформация>
+#+end_src
+
+#+RESULTS:
+#+begin_src ob-verb-response
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.14.7
+Date: Sun, 23 Aug 2026 09:03:33 GMT
+Content-Length: 7
+
+success
+#+end_src
