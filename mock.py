@@ -4,16 +4,32 @@ import argparse
 import itertools
 import logging
 import os
+import random
 import sys
 import threading
 import time
+import uuid
 from base64 import b64encode
+from collections import defaultdict
+from decimal import Decimal
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from operator import itemgetter
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 
+import xmlschema
+
+EMPTY = """<?xml version="1.0" encoding="UTF-8"?>
+<КоммерческаяИнформация
+    xmlns="urn:1C.ru:commerceml_3"
+    xmlns:xs="http://www.w3.org/2001/XMLSchema"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    ВерсияСхемы="3.1"
+    ДатаФормирования="2026-08-22T21:14:29">
+</КоммерческаяИнформация>
+"""
 
 ORDER = """<?xml version="1.0" encoding="UTF-8"?>
 <КоммерческаяИнформация
@@ -100,6 +116,15 @@ ORDER = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+def dpath(data, path, default_factory=lambda: None):
+    components = path.split(".")
+    for i in range(len(components) - 1):
+        if isinstance(data, list):
+            data = next(iter(data), {})
+        data = data.get(components[i]) or {}
+    return data.get(components[-1], default_factory())
+
+
 class ExchangeHandler(BaseHTTPRequestHandler):
     MAX_UPLOAD_CHUNK = 1024**2
     COOKIE_NAME = "PHPSESSID"
@@ -107,19 +132,132 @@ class ExchangeHandler(BaseHTTPRequestHandler):
     auth_token = b64encode(b"user:password").decode()
     sessions = {"207d5cfb792f0cbdeae6896bde279cc9": time.time()}
 
-    def __init__(self, *args, schema=None, **kwargs):
+    def __init__(self, *args, schema, storage, **kwargs):
         self.schema = schema
+        self.storage = storage
         super().__init__(*args, **kwargs)
 
     def _validate_xml(self, content):
-        if self.schema is None:
-            return True
         try:
             self.schema.validate(content)
         except Exception as exc:
             logging.error(exc)
             return False
         return True
+
+    def _store_data(self, content):
+        def storeby(data, path, key):
+            section = path.split(".")[-2]
+            for item in dpath(data, path, list):
+                self.storage[section][key(item)] = item
+
+        data = self.schema.to_dict(content, validation="skip")
+        storeby(data, "Каталог.Товары.Товар", itemgetter("Ид"))
+        for path in (
+            "ТипыЦен.ТипЦен",
+            "Склады.Склад",
+            "ЕдиницыИзмерения.ЕдиницаИзмерения",
+            "Группы.Группа",
+        ):
+            storeby(data, f"Классификатор.{path}", itemgetter("Ид"))
+        for item in dpath(data, "ПакетПредложений.Предложения.Предложение", list):
+            storeby(item, "Цены.Цена", lambda p: (item["Ид"], p["ИдТипаЦены"]))
+            storeby(item, "Остатки.Остаток", lambda p: (item["Ид"], p["Склад"]["Ид"]))
+
+    def _generate_order(self):
+        if not self.storage["Товары"]:
+            return ORDER
+
+        item = random.choice(list(self.storage["Товары"].values()))
+
+        warehouse_id = "00000000-0000-0000-0000-000000000000"
+        for (item_id, _), stock in self.storage["Остатки"].items():
+            if item_id == item["Ид"] and stock["Склад"]["Количество"] > 0:
+                warehouse_id = stock["Склад"]["Ид"]
+
+        price = Decimal("9335.42")
+        for (item_id, _), pricelist in self.storage["Цены"].items():
+            if item_id == item["Ид"]:
+                price = pricelist["ЦенаЗаЕдиницу"]
+
+        items = [
+            {
+                "Ид": "ORDER_DELIVERY",
+                "Наименование": "Доставка",
+                "БазоваяЕдиница": "796",
+                "Количество": Decimal("1.00"),
+                "ЦенаЗаЕдиницу": Decimal("348.00"),
+                "Сумма": Decimal("348.00"),
+            },
+            {
+                "Ид": item["Ид"],
+                "Наименование": item["Наименование"],
+                "БазоваяЕдиница": "796",
+                "ЗначенияРеквизитов": {
+                    "ЗначениеРеквизита": [
+                        {"Наименование": "Склад", "Значение": [warehouse_id]},
+                    ]
+                },
+                "Количество": Decimal("1.00"),
+                "ЦенаЗаЕдиницу": price,
+                "Сумма": price,
+            },
+        ]
+        partner = {
+            "Ид": ["da51150b-9955-4734-bf3a-ae2c3c54181a"],
+            "Наименование": ["Иванов Иван Иванович"],
+            "Контакты": [
+                {"Контакт": [{"Тип": "Телефон рабочий", "Значение": "+01234567890"}]},
+            ],
+        }
+        total = sum([item["Сумма"] for item in items])
+        order = {
+            "Ид": str(uuid.uuid4()),
+            "Номер": str(random.randint(1000, 10000)),
+            "Дата": time.strftime("%Y-%m-%d"),
+            "Время": time.strftime("%H:%M:%S"),
+            "ХозОперация": "Заказ товара",
+            "Контрагенты": {"Контрагент": [partner]},
+            "Валюта": "RUB",
+            "Курс": "1",
+            "Сумма": total,
+            "Основание": None,
+            "Роль": "Продавец",
+            "Товары": {"Товар": items},
+        }
+        payment = {
+            "Ид": str(uuid.uuid4()),
+            "Номер": str(random.randint(1000, 10000)),
+            "Дата": time.strftime("%Y-%m-%d"),
+            "Время": time.strftime("%H:%M:%S"),
+            "ХозОперация": "Эквайринговая операция",
+            "Контрагенты": {"Контрагент": [partner]},
+            "Валюта": "RUB",
+            "Курс": "1",
+            "Сумма": total,
+            "Основание": order["Ид"],
+            "Роль": "Продавец",
+        }
+        docs = {
+            "@xmlns": "urn:1C.ru:commerceml_3",
+            "@xmlns:xs": "http://www.w3.org/2001/XMLSchema",
+            "@xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "@ВерсияСхемы": "3.1",
+            "@ДатаФормирования": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "Контейнер": [{"Документ": [order, payment]}],
+        }
+
+        content = xmlschema.etree_tostring(
+            self.schema.encode(docs, "КоммерческаяИнформация"),
+            namespaces={
+                "": "urn:1C.ru:commerceml_3",
+                "xs": "http://www.w3.org/2001/XMLSchema",
+                "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            },
+            encoding="utf-8",
+            xml_declaration=True,
+        )
+        return content.decode("utf-8")
 
     def _authenticate(self):
         header = self.headers.get("Authorization", "")
@@ -205,8 +343,12 @@ class ExchangeHandler(BaseHTTPRequestHandler):
 
     def _handle_file(self, query):
         body = "".join(self._read_body())
-        logging.info("%s:\n%s", query.get("filename", "<file>"), "".join(body))
-        body = "success" if self._validate_xml(body) else "failure"
+        logging.info("%s:\n%s", query.get("filename", "<file>"), body)
+        if self._validate_xml(body):
+            self._store_data(body)
+            body = "success"
+        else:
+            body = "failure"
         self._respond(HTTPStatus.OK, body=body.encode())
 
     def _handle_import(self, query):
@@ -222,10 +364,13 @@ class ExchangeHandler(BaseHTTPRequestHandler):
         self._respond(HTTPStatus.OK, body=body.encode())
 
     def _handle_query(self, query):
-        body = ORDER
+        body = EMPTY
+        if self.storage.get("_send_order", True):
+            body = self._generate_order()
         if not self._validate_xml(body):
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
             return
+        logging.info("order.xml:\n%s", body)
         self._respond(
             HTTPStatus.OK,
             body=body.encode(),
@@ -247,15 +392,11 @@ class HotReloadServer:
         self.timer = threading.Event()
         self.server = None
 
-        self.schema = None
-        try:
-            import xmlschema
+        schema_path = Path(args.schema).resolve()
+        self.schema = xmlschema.XMLSchema(schema_path)
+        self.watched[schema_path] = 0
 
-            schema_path = Path(args.schema).resolve()
-            self.schema = xmlschema.XMLSchema(schema_path)
-            self.watched[schema_path] = 0
-        except ImportError:
-            logging.warning("validation disabled: xmlschema not installed")
+        self.storage = defaultdict(dict)
 
     def run(self):
         self.start_server()
@@ -295,7 +436,7 @@ class HotReloadServer:
     def start_server(self):
         self.server = ThreadingHTTPServer(
             (self.args.host, self.args.port),
-            partial(ExchangeHandler, schema=self.schema),
+            partial(ExchangeHandler, schema=self.schema, storage=self.storage),
         )
         logging.info("listening on http://%s:%s", self.args.host, self.args.port)
         logging.info(
