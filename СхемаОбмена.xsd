@@ -282,7 +282,8 @@
             <xs:element name="Сумма"
                         type="tns:СуммаТип" />
             <xs:element name="Основание"
-                        type="tns:ИдентификаторГлобальныйТип" />
+                        type="tns:ИдентификаторГлобальныйТип"
+                        minOccurs="0" />
             <xs:element name="Роль"
                         type="tns:РольТип" />
             <xs:element name="СрокПлатежа"
@@ -377,6 +378,9 @@
                                                         type="tns:КоличествоТип"
                                                         minOccurs="0" />
                                             <xs:element name="ЦенаЗаЕдиницу"
+                                                        type="tns:СуммаТип"
+                                                        minOccurs="0" />
+                                            <xs:element name="Цена"
                                                         type="tns:СуммаТип"
                                                         minOccurs="0" />
                                             <xs:element name="Сумма"
@@ -805,7 +809,7 @@
                     <xs:sequence>
                         <xs:element name="ЕдиницаИзмерения"
                                     type="tns:ЕдиницаИзмерения"
-                                    minOccurs="1"
+                                    minOccurs="0"
                                     maxOccurs="unbounded" />
                     </xs:sequence>
                 </xs:complexType>
@@ -1284,11 +1288,13 @@
                     </xs:sequence>
                 </xs:complexType>
             </xs:element>
-            <xs:element name="Предложения">
+            <xs:element name="Предложения"
+                        minOccurs="0">
                 <xs:complexType>
                     <xs:sequence>
                         <xs:element name="Предложение"
                                     type="tns:Предложение"
+                                    minOccurs="0"
                                     maxOccurs="unbounded" />
                     </xs:sequence>
                 </xs:complexType>
@@ -2154,7 +2160,8 @@
             <xs:element name="Наименование"
                         type="tns:НаименованиеТип" />
             <xs:element name="БазоваяЕдиница"
-                        type="tns:ИдентификаторГлобальныйТип" />
+                        type="tns:ИдентификаторГлобальныйТип"
+                        minOccurs="0" />
             <xs:element name="ИдТовараУКонтрагента"
                         type="tns:ИдентификаторГлобальныйТип"
                         minOccurs="0" />
