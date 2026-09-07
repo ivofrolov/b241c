@@ -4,6 +4,7 @@ import argparse
 import itertools
 import logging
 import os
+import pickle
 import random
 import sys
 import threading
@@ -396,9 +397,21 @@ class HotReloadServer:
         self.schema = xmlschema.XMLSchema(schema_path)
         self.watched[schema_path] = 0
 
+        self.cache_path = Path(args.cache).resolve() if args.cache else None
         self.storage = defaultdict(dict)
 
+    def load_storage(self):
+        if self.cache_path and self.cache_path.exists():
+            with self.cache_path.open("rb") as fp:
+                self.storage.update(pickle.load(fp))
+
+    def dump_storage(self):
+        if self.cache_path:
+            with self.cache_path.open("wb") as fp:
+                pickle.dump(self.storage, fp)
+
     def run(self):
+        self.load_storage()
         self.start_server()
         for path in self.watched:
             self.watched[path] = path.stat().st_mtime
@@ -409,6 +422,7 @@ class HotReloadServer:
     def cancel(self):
         self.timer.set()
         self.stop_server()
+        self.dump_storage()
 
     def poll(self):
         for path, last_mtime in self.watched.items():
@@ -419,7 +433,7 @@ class HotReloadServer:
             return
 
         logging.warning("reloading")
-        self.stop_server()
+        self.cancel()
         args = ["python3", __file__]
         args.extend(
             itertools.chain.from_iterable(
@@ -452,6 +466,7 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="localhost", help="bind address")
     parser.add_argument("--port", type=int, default=8000, help="bind port")
     parser.add_argument("--schema", default="СхемаОбмена.xsd", help="XML schema")
+    parser.add_argument("--cache", help="persistent cache location")
     args = parser.parse_args()
 
     logging.basicConfig(
